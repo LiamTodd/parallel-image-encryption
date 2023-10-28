@@ -6,6 +6,7 @@ from src.coupled_map_logistic_lattices import (
     generate_coupled_map_logistic_lattices,
     process_cmls,
 )
+from src.decrypt import decrypt
 from src.permutation import permutate_data
 from src.TIDBD_diffusion import TIDBD_diffuse
 from src.utils import generate_secret_key, parse_args
@@ -24,13 +25,15 @@ def main():
     cmls = generate_coupled_map_logistic_lattices(K, m, n, THREADS)
     M, N, H, S, A, B, D, E = process_cmls(cmls, m, n, par)
     permutated_img_data = permutate_data(img_data, M, N, S, H)
-    diffused_img_data = TIDBD_diffuse(permutated_img_data, THREADS, A, B, D, E)
+    diffused_img_data = TIDBD_diffuse(permutated_img_data, THREADS, A, B, D, E, m, n)
+    decrypted_img_data = decrypt(diffused_img_data, m, n)
 
     if show_images:
         image.show()
         permuted_image = Image.fromarray(permutated_img_data)
         permuted_image.show()
-        diffused_img_data.show()
+        diffused_image = Image.fromarray(diffused_img_data)
+        diffused_image.show()
 
     return 0
 
