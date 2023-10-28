@@ -105,8 +105,96 @@ def TIDBD_diffuse(permutated_img_data, p, A, B, D, E, m, n):
     else:
         C = C[0 : m * n].reshape(m, n)
 
-    return C
+    return C, GD1, GD2
 
 
-def decrypt_diffusion(diffused_img_data, m, n):
-    print(type(diffused_img_data), m, n)
+def decrypt_diffuse(Gr, Ar, Br, Dr, Er):
+    Fr = []
+    Gr_len = len(Gr)
+    Gr = np.concatenate(([(Ar * pow(10, 5)) % 256], Gr))
+    Gr = np.concatenate(([(Br * pow(10, 5)) % 256], Gr))
+    mu = 3.99 + 0.01 * Dr
+    xi = Er
+    for i in range(1, Gr_len + 1):
+        xi = logistic_map(xi, mu)
+        Fr.append(
+            (
+                Gr[i + 1]
+                - math.floor(Gr[i - 1] + pow(10, 5) * Gr[i] / 255 + xi * pow(10, 5))
+            )
+            % 256
+        )
+    return Fr
+
+
+def thread_func_3(O, A, B, D, E, r, p):
+    return decrypt_diffuse(O[r - p - 4], A[r], B[r], D[r], E[r])
+
+
+def thread_func_4(Gr_list, A, B, D, E, r):
+    return decrypt_diffuse(Gr_list[r], A[r], B[r], D[r], E[r])
+
+
+def decrypt_diffusion(diffused_img_data, m, n, p, A, B, D, E, GD1, GD2):
+    C = diffused_img_data.reshape(1, m * n)[0]
+    O = []
+    if (m * n) % p == 0:
+        t = m * n // p
+    else:
+        t = math.floor(m * n / p) + 1
+        T = np.zeros((t * p) - (m * n), np.uint8)
+        C = np.append(C, T)
+
+    for r in range(p):
+        O.append(C[r * t : (r + 1) * t])
+
+    # parallel decryption of second diffusion of groups
+    pool = ThreadPool(POOL_SIZE)
+    Gr_list = []
+    for r in range(p + 4, 2 * p + 4):
+        x = pool.apply_async(thread_func_3, (O, A, B, D, E, r, p))
+        Gr_list.append(x.get())
+    pool.close()
+    pool.join()
+
+    for r in range(p):
+        GD1[r] = Gr_list[r][0]
+        GD2[r] = Gr_list[r][1]
+    GC1 = decrypt_diffuse(GD1, A[p + 2], B[p + 2], D[p + 2], E[p + 2])
+    GC2 = decrypt_diffuse(GD2, A[p + 4], B[p + 4], D[p + 4], E[p + 4])
+
+    GB1 = np.flip(GC1)
+    GB2 = np.flip(GC2)
+
+    GA1 = decrypt_diffuse(GB1, A[p + 1], B[p + 1], D[p + 1], E[p + 1])
+    GA2 = decrypt_diffuse(GB2, A[p + 3], B[p + 3], D[p + 3], E[p + 3])
+
+    for r in range(p):
+        Gr_list[r][0] = GA1[r]
+        Gr_list[r][1] = GA2[r]
+
+    for r in range(p):
+        Gr_len = len(Gr_list[r])
+        Gr_list[r][0], Gr_list[r][Gr_len - 1] = Gr_list[r][Gr_len - 1], Gr_list[r][0]
+        Gr_list[r][1], Gr_list[r][Gr_len - 2] = Gr_list[r][Gr_len - 2], Gr_list[r][1]
+
+    # parallel decryption of first diffusion of groups
+    pool = ThreadPool(POOL_SIZE)
+    Fr = []
+    for r in range(p):
+        x = pool.apply_async(thread_func_4, (Gr_list, A, B, D, E, r))
+        Fr.append(x.get())
+
+    pool.close()
+    pool.join()
+
+    P = []
+    for i in range(p):
+        P.append(Fr[i])
+    P = np.array(P)
+    if (m * n) % p == 0:
+        P = P.reshape(m, n)
+    else:
+        P = P[0 : m * n].reshape(m, n)
+
+    return P
