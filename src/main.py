@@ -14,16 +14,17 @@ from src.utils import generate_secret_key, handle_output, parse_args
 
 def main():
     show_images, file_path = parse_args()
-
     # convert image to greyscale
     image = Image.open(file_path).convert("L")
     img_data = np.asarray(image)
+
+    # generate CMLs for permutation and diffusion
     par = 2 * THREADS + 4
     K = generate_secret_key(SECRET_KEY_BITS)
     m = img_data.shape[0]
     n = img_data.shape[1]
-    # generate CMLs for permutation and diffusion
     cmls = generate_coupled_map_logistic_lattices(K, m, n, THREADS)
+    # extract lattices from CML
     M, N, H, S, A, B, D, E = process_cmls(cmls, m, n, par)
     # permute image
     permutated_img_data = permute_data(img_data, M, N, S, H)

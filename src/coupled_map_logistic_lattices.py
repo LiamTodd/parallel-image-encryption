@@ -5,6 +5,9 @@ from src.utils import logistic_map
 
 
 def process_cmls(cmls, m, n, par):
+    """
+    This function extracts the lattices from the CML, which will be used to seed the permutation and diffusion processes
+    """
     M = cmls[0][-m:]
     M = [math.floor(M[i] * pow(10, 10)) for i in range(len(M))]
     N = cmls[1][-n:]
@@ -26,8 +29,22 @@ def process_cmls(cmls, m, n, par):
 
 
 def generate_coupled_map_logistic_lattices(K, m, n, par):
+    """
+    This function generates the CML given a secret key, dimensions, and the level of parallelism
+    """
     # secret key divided into subkeys
     k = [K[i : i + SECRET_KEY_BITS // NUM_SUB_KEYS] for i in range(NUM_SUB_KEYS)]
+
+    # initialise lattice values using the subkeys
+    x_0 = [0] * NUM_LATTICES
+    for i in range(NUM_LATTICES):
+        for j in range(SECRET_KEY_BITS // NUM_SUB_KEYS):
+            x_0[i] += int(k[i + 2][j]) * 2**j
+        x_0[i] /= 2 ** (SECRET_KEY_BITS // NUM_SUB_KEYS)
+
+    x = [[0] * (201 + max(n, n, par)) for _ in range(NUM_LATTICES)]
+    for i in range(NUM_LATTICES):
+        x[i][0] = x_0[i]
 
     # get mu and e
     temp_sum_mu = 0
@@ -39,17 +56,7 @@ def generate_coupled_map_logistic_lattices(K, m, n, par):
     mu = 3.99 + (0.01 * temp_sum_mu / (2 ** (SECRET_KEY_BITS // NUM_SUB_KEYS)))
     e = 0.1 * temp_sum_e / (2 ** (SECRET_KEY_BITS // NUM_SUB_KEYS))
 
-    x_0 = [0] * NUM_LATTICES
-    for i in range(NUM_LATTICES):
-        for j in range(SECRET_KEY_BITS // NUM_SUB_KEYS):
-            x_0[i] += int(k[i + 2][j]) * 2**j
-        x_0[i] /= 2 ** (SECRET_KEY_BITS // NUM_SUB_KEYS)
-
-    x = [[0] * (201 + max(n, n, par)) for _ in range(NUM_LATTICES)]
-    for i in range(NUM_LATTICES):
-        x[i][0] = x_0[i]
-
-    # iterate 201+max(m,n,par) times and find xi in every lattice
+    # apply chaos to lattices using logistic map
     for i in range(1, 201 + max(m, n, par)):
         for lattice in range(NUM_LATTICES):
             if lattice == 0:

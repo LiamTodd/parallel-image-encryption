@@ -8,11 +8,16 @@ from src.utils import logistic_map
 
 
 def diffuse(Fr, Ar, Br, Dr, Er):
+    """
+    This function applies a diffusion to a group of pixels using CML lattices as well as the logistic map,
+    ensuring a high-entropy resultant group
+    """
     Gr = []
     Gr.append(Ar * pow(10, 5) % 256)
     Gr.append(Br * pow(10, 5) % 256)
     mu = 3.99 + 0.01 * Dr
     xi = Er
+    # Apply chaotic transformation to each pixel in the group Gr, using the CML lattices as well as the logistic map
     for i in range(1, len(Fr) + 1):
         xi = logistic_map(xi, mu)
         Gr.append(
@@ -35,6 +40,14 @@ def thread_func_2(Gr_list, A, B, D, E, r, p):
 
 
 def TIDBD_diffuse(permutated_img_data, p, A, B, D, E, m, n):
+    """
+    This function implements the TIDBD diffusion algorithm in the following steps:
+    1. segment the image into p groups
+    2. first independent diffusion of each group in parallel
+    3. swap top and bottom two pixels
+    4. bidirectional diffusion of top two rows
+    5. second independent diffusion of each group in parallel
+    """
     permutated_img_data = permutated_img_data.reshape(1, m * n)[0]
 
     # segment P1 into p groups with length t
@@ -73,13 +86,18 @@ def TIDBD_diffuse(permutated_img_data, p, A, B, D, E, m, n):
         GA1.append(Gr_list[r][0])
         GA2.append(Gr_list[r][1])
 
+    # diffuse top row in one horizontal direction (left to right)
     GB1 = diffuse(GA1, A[p + 1], B[p + 1], D[p + 1], E[p + 1])
+    # diffuse second row in one horizontal direction (left to right)
     GB2 = diffuse(GA2, A[p + 3], B[p + 3], D[p + 3], E[p + 3])
 
+    # reverse the top two rows, in order to do the diffusion in the second direction
     GC1 = np.flip(GB1)
     GC2 = np.flip(GB2)
 
+    # diffuse top row in opposite horizontal dirrection (right to left)
     GD1 = diffuse(GC1, A[p + 2], B[p + 2], D[p + 2], E[p + 2])
+    # diffuse second row in opposite horizontal direction (right to left)
     GD2 = diffuse(GC2, A[p + 4], B[p + 4], D[p + 4], E[p + 4])
 
     for r in range(p):
@@ -109,6 +127,9 @@ def TIDBD_diffuse(permutated_img_data, p, A, B, D, E, m, n):
 
 
 def decrypt_diffuse(Gr, Ar, Br, Dr, Er):
+    """
+    This function reverses the TIDBD diffusion algorithm defined in TIDBD_diffuse()
+    """
     Fr = []
     Gr_len = len(Gr)
     Gr = np.concatenate(([(Ar * pow(10, 5)) % 256], Gr))
@@ -157,6 +178,7 @@ def decrypt_diffusion(diffused_img_data, m, n, p, A, B, D, E, GD1, GD2):
     pool.close()
     pool.join()
 
+    # decryption of bidirectional diffusion
     for r in range(p):
         GD1[r] = Gr_list[r][0]
         GD2[r] = Gr_list[r][1]
